@@ -1,0 +1,487 @@
+<!DOCTYPE html>
+<html lang="da">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Rom Restaurant & Aperitivo Kort</title>
+
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Leaflet.js CSS & JS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+    
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Playfair+Display:ital,wght@0,600;0,700;1,400&display=swap" rel="stylesheet">
+
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        .font-serif-italy {
+            font-family: 'Playfair Display', serif;
+        }
+        #map-container {
+            width: 100%;
+            height: 100%;
+            min-height: 400px;
+            position: relative;
+            z-index: 1;
+        }
+        #map {
+            width: 100%;
+            height: 100%;
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+        }
+        /* Custom Leaflet Marker Styling */
+        .custom-pin {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 50%;
+            color: white;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.35);
+            border: 2px solid white;
+            transition: transform 0.2s ease;
+        }
+        .custom-pin:hover {
+            transform: scale(1.2);
+            z-index: 999 !important;
+        }
+        /* Leaflet popup styling */
+        .leaflet-popup-content-wrapper {
+            border-radius: 12px;
+            padding: 4px;
+            box-shadow: 0 10px 25px -5px rgba(0,0,0,0.25);
+        }
+        .leaflet-popup-content {
+            margin: 12px 14px;
+            line-height: 1.5;
+        }
+        /* Custom scrollbar */
+        ::-webkit-scrollbar {
+            width: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #f1f1f1;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8;
+        }
+    </style>
+</head>
+<body class="bg-slate-50 h-screen flex flex-col md:flex-row overflow-hidden">
+
+    <!-- Mobile Top Navigation / Header -->
+    <header class="bg-amber-950 text-amber-50 p-4 shadow-md flex justify-between items-center z-20 md:hidden flex-shrink-0">
+        <div>
+            <h1 class="font-serif-italy text-xl font-bold tracking-wide flex items-center gap-2">
+                <i class="fa-solid fa-utensils text-amber-400"></i> Guida di Roma
+            </h1>
+            <p class="text-xs text-amber-200">Restauranter, Pizzeriaer & Aperitivo</p>
+        </div>
+        <button id="toggle-list-btn" class="bg-amber-850 hover:bg-amber-800 text-amber-100 px-3 py-2 rounded-lg text-sm flex items-center gap-2 border border-amber-700 transition">
+            <i class="fa-solid fa-list"></i>
+            <span>Steder</span>
+        </button>
+    </header>
+
+    <!-- Sidebar / Drawer -->
+    <aside id="sidebar" class="fixed inset-y-0 left-0 w-full md:w-96 bg-white shadow-2xl z-30 transform -translate-x-full md:translate-x-0 transition-transform duration-300 ease-in-out flex flex-col h-full md:relative md:shadow-none border-r border-slate-200">
+        
+        <!-- Sidebar Header -->
+        <div class="bg-gradient-to-r from-amber-950 via-amber-900 to-amber-850 text-white p-5 shadow-sm flex-shrink-0">
+            <div class="flex justify-between items-center mb-1">
+                <h1 class="font-serif-italy text-2xl font-bold tracking-wide flex items-center gap-2">
+                    <i class="fa-solid fa-pizza-slice text-amber-400"></i> Roma Culinary
+                </h1>
+                <button id="close-sidebar-btn" class="md:hidden text-amber-200 hover:text-white p-1">
+                    <i class="fa-solid fa-xmark text-xl"></i>
+                </button>
+            </div>
+            <p class="text-xs text-amber-200 font-light">29 håndplukkede spisesteder & barer i Rom</p>
+            
+            <!-- Search Bar -->
+            <div class="mt-4 relative">
+                <i class="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm"></i>
+                <input type="text" id="search-input" placeholder="Søg på navn, vej eller mad..." 
+                       class="w-full pl-9 pr-4 py-2 bg-slate-900/50 text-white placeholder-slate-400 rounded-lg text-sm border border-amber-800/60 focus:outline-none focus:ring-2 focus:ring-amber-500">
+            </div>
+        </div>
+
+        <!-- Filter Tabs -->
+        <div class="p-3 bg-slate-100 border-b border-slate-200 flex gap-1 overflow-x-auto text-xs font-medium flex-shrink-0">
+            <button class="filter-btn active flex-1 py-2 px-2.5 rounded-md bg-amber-900 text-white shadow-sm transition whitespace-nowrap" data-category="all">
+                Alle (<span id="count-all">0</span>)
+            </button>
+            <button class="filter-btn flex-1 py-2 px-2.5 rounded-md bg-white text-slate-700 hover:bg-slate-200 transition border border-slate-200 whitespace-nowrap" data-category="restaurant">
+                <i class="fa-solid fa-utensils text-red-600 mr-1"></i> Spise (<span id="count-restaurant">0</span>)
+            </button>
+            <button class="filter-btn flex-1 py-2 px-2.5 rounded-md bg-white text-slate-700 hover:bg-slate-200 transition border border-slate-200 whitespace-nowrap" data-category="pizzeria">
+                <i class="fa-solid fa-pizza-slice text-amber-600 mr-1"></i> Pizza (<span id="count-pizzeria">0</span>)
+            </button>
+            <button class="filter-btn flex-1 py-2 px-2.5 rounded-md bg-white text-slate-700 hover:bg-slate-200 transition border border-slate-200 whitespace-nowrap" data-category="aperitivo">
+                <i class="fa-solid fa-martini-glass-citrus text-purple-600 mr-1"></i> Bar (<span id="count-aperitivo">0</span>)
+            </button>
+        </div>
+
+        <!-- Place List -->
+        <div id="places-list" class="flex-1 overflow-y-auto divide-y divide-slate-100 p-2">
+            <!-- Items rendered dynamically -->
+        </div>
+
+        <!-- Footer -->
+        <div class="p-3 bg-slate-50 border-t border-slate-200 text-center text-xs text-slate-500 flex-shrink-0">
+            Vælg et sted for at åbne i Google Maps eller fokusere kortet.
+        </div>
+    </aside>
+
+    <!-- Map Container -->
+    <main class="flex-1 h-full relative">
+        <div id="map-container">
+            <div id="map"></div>
+        </div>
+
+        <!-- Legend Overlay (Desktop) -->
+        <div class="hidden md:flex absolute bottom-6 right-6 bg-white/95 backdrop-blur-md p-3 rounded-xl shadow-lg border border-slate-200 z-[1000] text-xs gap-4 items-center pointer-events-auto">
+            <div class="flex items-center gap-1.5">
+                <span class="w-3.5 h-3.5 rounded-full bg-red-600 inline-block shadow-sm"></span>
+                <span class="font-medium text-slate-700">Restauranter</span>
+            </div>
+            <div class="flex items-center gap-1.5">
+                <span class="w-3.5 h-3.5 rounded-full bg-amber-500 inline-block shadow-sm"></span>
+                <span class="font-medium text-slate-700">Pizzeriaer</span>
+            </div>
+            <div class="flex items-center gap-1.5">
+                <span class="w-3.5 h-3.5 rounded-full bg-purple-600 inline-block shadow-sm"></span>
+                <span class="font-medium text-slate-700">Aperitivo & Barer</span>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        // --- Data: coordinates and place IDs taken from Google Maps ---
+        const locations = [
+            // RESTAURANTER (Red)
+            { id: 1, name: "Osteria de Memmo", category: "restaurant", address: "Via dei Soldati 22-23", area: "Centro", lat: 41.9015387, lng: 12.4723360, placeId: "ChIJy_KOgVpgLxMRI9SOGujPuDM", note: "Klassisk trattoria med traditionelle retter. Gode romerske pastaretter som amatriciana og carbonara. Spædlam og maialino." },
+            { id: 2, name: "Pierluigi", category: "restaurant", address: "Piazza de' Ricci 144", area: "Centro / Campo de' Fiori", lat: 41.8967899, lng: 12.4686550, placeId: "ChIJycEjW0RgLxMRYBO1pi8oKBs", note: "Fremragende fisk og mad (lidt dyrt). Tæt på Piazza Farnese." },
+            { id: 3, name: "Le Mani in Pasta", category: "restaurant", address: "Via dei Genovesi 37", area: "Trastevere", lat: 41.8877679, lng: 12.4771463, placeId: "ChIJset_azZgLxMRNVT6N-hsiDc", note: "Trastevere, skøn hjemmelavet pasta." },
+            { id: 4, name: "Da Teo", category: "restaurant", address: "Piazza dei Ponziani 7", area: "Trastevere", lat: 41.8885147, lng: 12.4776931, placeId: "ChIJK4O0BTZgLxMRKAicl9QVh4A", note: "Trastevere, god value for money." },
+            { id: 5, name: "Osteria der Belli", category: "restaurant", address: "Piazza Sant'Apollonia 11", area: "Trastevere", lat: 41.8898728, lng: 12.4707929, placeId: "ChIJrUlUFithLxMRrBCEyL5BUfA", note: "Trastevere, skøn hjemmelavet pasta, frisk fisk og lam." },
+            { id: 6, name: "Enoteca Ferrara", category: "restaurant", address: "Piazza Trilussa 41", area: "Trastevere", lat: 41.8913591, lng: 12.4702480, placeId: "ChIJNZ6ApEdgLxMRsPTTOiWwclM", note: "Trastevere, hyggelig vinbar & eksklusiv ristorante." },
+            { id: 7, name: "Hosteria da Settimio", category: "restaurant", address: "Via di Val Tellina 81", area: "Monteverde", lat: 41.8678389, lng: 12.4475077, placeId: "ChIJZ76AQq-KJRMRndMvze_-430", note: "Monteverde." },
+            { id: 8, name: "Enoteca Corsi", category: "restaurant", address: "Via del Gesù 88", area: "Centro", lat: 41.8968706, lng: 12.4787834, placeId: "ChIJ27G3v1pgLxMRY_MlyNBznzY", note: "Centro, sjovt og lokalt frokoststed i vinbutik med mamma-køkken." },
+            { id: 9, name: "L'Osteria di Monteverde", category: "restaurant", address: "Via Pietro Cartoni 163", area: "Monteverde", lat: 41.8729819, lng: 12.4553504, placeId: "ChIJoXU9Ch5gLxMR60NVYTsNkSw", note: "Monteverde, mindre tradizionale." },
+            { id: 10, name: "Dogma", category: "restaurant", address: "Piazza Zama 34", area: "San Giovanni", lat: 41.8760866, lng: 12.5093224, placeId: "ChIJhW9wJ-9hLxMRXv3Nyb5HH04", note: "Moderne romersk køkken." },
+            { id: 11, name: "Trecca - Roma", category: "restaurant", address: "Via Alessandro Severo 220", area: "Garbatella", lat: 41.8534782, lng: 12.4867171, placeId: "ChIJQz_4gWGKJRMRb4p1tB5Ddvs", note: "Traditionelt romersk køkken." },
+            { id: 12, name: "Mezè Bistrot Monteverde", category: "restaurant", address: "Via di Monteverde 9", area: "Monteverde", lat: 41.8719363, lng: 12.4559123, placeId: "ChIJnyLuAh5gLxMR8HlTtYPDGw0", note: "Middelhavskøkken, couscous, falafel, siciliansk pasta." },
+            { id: 13, name: "Mezè Bistrot Prati", category: "restaurant", address: "Via Properzio 30", area: "Prati", lat: 41.9054545, lng: 12.4610674, placeId: "ChIJ53fdSithLxMRaXMx0Lqoe8E", note: "Prati afdeling af Mezè Bistrot." },
+            { id: 14, name: "Marigold - Roma", category: "restaurant", address: "Via Giovanni da Empoli 37", area: "Ostiense", lat: 41.8733505, lng: 12.4787423, placeId: "ChIJu3CXHwhhLxMRbGhwk-n48_Q", note: "Ostiense, dansk/calabresisk par, bageri og mad af bedste råvarer." },
+
+            // PIZZERIAER (Orange)
+            { id: 15, name: "Da Francesco", category: "pizzeria", address: "Piazza del Fico 29 / Via del Corallo", area: "Piazza Navona", lat: 41.8993349, lng: 12.4703917, placeId: "ChIJ-0huSkVgLxMRwyDaaXfRhzI", note: "Klassisk romersk pizzeria." },
+            { id: 16, name: "Caramella", category: "pizzeria", address: "Vicolo del Cinque 31a", area: "Trastevere", lat: 41.8911968, lng: 12.4701021, placeId: "ChIJv62PoUdgLxMR3uyZTdBFehY", note: "Piazza Trilussa / Vicolo del Cinque." },
+            { id: 17, name: "EMMA", category: "pizzeria", address: "Via del Monte della Farina 28", area: "Centro", lat: 41.8948002, lng: 12.4752375, placeId: "ChIJidqXKE9gLxMRoPu1i7w_aOs", note: "Kvalitetspizza i centrum." },
+            { id: 18, name: "Sorbillo - Rinascente", category: "pizzeria", address: "Via del Tritone 61 (Rinascente, 6. sal)", area: "Centro / Trevi", lat: 41.9027487, lng: 12.4845887, placeId: "ChIJNTcF5RRhLxMRGVtrl40Ev_M", note: "Neapolitansk pizza i stormagasinet Rinascente." },
+            { id: 19, name: "La Gatta Mangiona", category: "pizzeria", address: "Via Federico Ozanam 30-32", area: "Monteverde", lat: 41.8757358, lng: 12.4477564, placeId: "ChIJU1VgGgNgLxMRxykaY1BwCQA", note: "Monteverde, fantastisk gourmetpizza." },
+            { id: 20, name: "SEU Pizza Illuminati", category: "pizzeria", address: "Via Angelo Bargoni 10-18", area: "Trastevere", lat: 41.88102, lng: 12.47164, placeId: null, note: "Moderne gourmetpizza. (Ikke fundet på Google Maps; placering ikke verificeret, linket søger efter stedet.)" },
+            { id: 21, name: "180grammi PIZZA", category: "pizzeria", address: "Via Genazzano 32", area: "Centocelle", lat: 41.8912031, lng: 12.5527832, placeId: "ChIJN2m5iE1jLxMR8It_53IsAFI", note: "Romersk tynd pizza (scrocchiarella)." },
+
+            // APERITIVO & BARER (Purple)
+            { id: 22, name: "Freni & Frizioni", category: "aperitivo", address: "Via del Politeama 4-6", area: "Trastevere", lat: 41.8913492, lng: 12.4707561, placeId: "ChIJS0bh60dgLxMR5n3lh9HtPt8", note: "Trastevere, cocktailbar & aperitivo." },
+            { id: 23, name: "Salotto 42", category: "aperitivo", address: "Piazza di Pietra 42", area: "Centro", lat: 41.9001210, lng: 12.4793120, placeId: "ChIJs9tSPlJgLxMR3CpMqslM3a4", note: "Trendy bar ved Hadrian-templet." },
+            { id: 24, name: "Bar Gianicolo", category: "aperitivo", address: "Piazzale Aurelio 5", area: "Gianicolo", lat: 41.8882528, lng: 12.4612167, placeId: "ChIJw1j8Jj5gLxMRTb8uFhecmOQ", note: "Fantastisk udsigt over Rom." },
+            { id: 25, name: "Il Goccetto", category: "aperitivo", address: "Via dei Banchi Vecchi 14", area: "Centro", lat: 41.8977936, lng: 12.4673106, placeId: "ChIJKSl5hkRgLxMRPAPQP8e3xpw", note: "Klassisk vinbar." },
+            { id: 26, name: "Il Baretto", category: "aperitivo", address: "Via Garibaldi 27g", area: "Trastevere", lat: 41.8874759, lng: 12.4663586, placeId: "ChIJ3W-COkdgLxMRSEL1xvI1PWo", note: "Hyggelig bar i Trastevere." },
+            { id: 27, name: "La Zanzara", category: "aperitivo", address: "Via Crescenzio 84", area: "Prati", lat: 41.9061010, lng: 12.4601136, placeId: "ChIJBdF8BF5gLxMRS3yyg4K1soM", note: "Prati, livlig cocktailbar og aperitivo." },
+            { id: 28, name: "Hotel Locarno", category: "aperitivo", address: "Via della Penna 22", area: "Popolo", lat: 41.9096832, lng: 12.4747579, placeId: "ChIJzRDszdVhLxMRORcobYK7kdM", note: "Elegant hotelbar/have tæt på Piazza del Popolo." },
+            { id: 29, name: "Il Sorpasso", category: "aperitivo", address: "Via Properzio 31-33", area: "Prati", lat: 41.9055098, lng: 12.4613183, placeId: "ChIJ_T6FAF5gLxMRk-_hYuk4BlE", note: "Prati, meget populær bar og vinbar." }
+        ];
+
+        // Link to the actual Google Maps place listing (reviews, hours, photos), not a dropped pin
+        function gmapsUrl(loc) {
+            const q = encodeURIComponent(`${loc.name}, ${loc.address}, Roma`);
+            return loc.placeId
+                ? `https://www.google.com/maps/search/?api=1&query=${q}&query_place_id=${loc.placeId}`
+                : `https://www.google.com/maps/search/?api=1&query=${q}`;
+        }
+
+
+        // --- App Configuration & State ---
+        let map;
+        let markers = [];
+        let activeCategory = 'all';
+        let searchQuery = '';
+
+        const categoryConfig = {
+            restaurant: {
+                color: '#dc2626',
+                bgClass: 'bg-red-100 text-red-800 border-red-200',
+                icon: 'fa-utensils',
+                label: 'Restaurant'
+            },
+            pizzeria: {
+                color: '#f59e0b',
+                bgClass: 'bg-amber-100 text-amber-800 border-amber-200',
+                icon: 'fa-pizza-slice',
+                label: 'Pizzeria'
+            },
+            aperitivo: {
+                color: '#9333ea',
+                bgClass: 'bg-purple-100 text-purple-800 border-purple-200',
+                icon: 'fa-martini-glass-citrus',
+                label: 'Aperitivo & Bar'
+            }
+        };
+
+        // Initialize App on DOM Load
+        window.addEventListener('load', () => {
+            initMap();
+            updateCounts();
+            renderPlacesList();
+            setupEventListeners();
+        });
+
+        // Initialize Leaflet Map safely
+        function initMap() {
+            // Default center of Rome [41.8902, 12.4922] zoom 13
+            map = L.map('map', {
+                zoomControl: false
+            }).setView([41.8902, 12.4922], 13);
+
+            // Add Zoom Control to Top Right
+            L.control.zoom({ position: 'topright' }).addTo(map);
+
+            // Standard valid Tile Layer URL for OpenStreetMap
+            L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                maxZoom: 19,
+                attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+            }).addTo(map);
+
+            // Add all markers
+            addMarkers();
+
+            // Invalidate size to guarantee smooth map rendering without layout bugs
+            setTimeout(() => {
+                map.invalidateSize();
+            }, 250);
+
+            window.addEventListener('resize', () => {
+                map.invalidateSize();
+            });
+        }
+
+        // Add Markers to Map
+        function addMarkers() {
+            locations.forEach(loc => {
+                const config = categoryConfig[loc.category];
+                
+                // Custom DivIcon for crisp visual representation
+                const customIcon = L.divIcon({
+                    className: 'custom-leaflet-marker',
+                    html: `<div class="custom-pin" style="background-color: ${config.color}; width: 34px; height: 34px;">
+                            <i class="fa-solid ${config.icon} text-xs"></i>
+                           </div>`,
+                    iconSize: [34, 34],
+                    iconAnchor: [17, 17],
+                    popupAnchor: [0, -18]
+                });
+
+                const url = gmapsUrl(loc);
+
+                const popupContent = `
+                    <div class="space-y-2">
+                        <div class="flex items-center gap-1.5">
+                            <span class="px-2 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wider ${config.bgClass}">
+                                ${config.label}
+                            </span>
+                            <span class="text-xs text-slate-500 font-medium">${loc.area}</span>
+                        </div>
+                        <h3 class="font-serif-italy font-bold text-base text-slate-900 leading-tight">${loc.name}</h3>
+                        <p class="text-xs text-slate-600 flex items-center gap-1">
+                            <i class="fa-solid fa-location-dot text-slate-400"></i> ${loc.address}
+                        </p>
+                        ${loc.note ? `<p class="text-xs text-slate-700 bg-slate-50 p-2 rounded border border-slate-100">${loc.note}</p>` : ''}
+                        <a href="${url}" target="_blank" rel="noopener noreferrer" 
+                           class="inline-flex items-center justify-center gap-1.5 w-full bg-amber-900 hover:bg-amber-800 text-white text-xs font-medium py-1.5 px-3 rounded-lg shadow transition mt-1">
+                            <i class="fa-solid fa-diamond-turn-right text-amber-300"></i> Åbn i Google Maps
+                        </a>
+                    </div>
+                `;
+
+                const marker = L.marker([loc.lat, loc.lng], { icon: customIcon }).addTo(map);
+                marker.bindPopup(popupContent);
+                
+                // Store reference
+                markers.push({ id: loc.id, marker: marker, location: loc });
+            });
+        }
+
+        // Render List in Sidebar
+        function renderPlacesList() {
+            const listContainer = document.getElementById('places-list');
+            listContainer.innerHTML = '';
+
+            const filtered = locations.filter(loc => {
+                const matchesCategory = activeCategory === 'all' || loc.category === activeCategory;
+                const matchesSearch = searchQuery === '' || 
+                    loc.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                    loc.address.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                    loc.area.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                    loc.note.toLowerCase().includes(searchQuery.toLowerCase());
+                return matchesCategory && matchesSearch;
+            });
+
+            if (filtered.length === 0) {
+                listContainer.innerHTML = `
+                    <div class="p-8 text-center text-slate-400">
+                        <i class="fa-solid fa-compass text-3xl mb-2"></i>
+                        <p class="text-sm font-medium">Ingen steder fundet</p>
+                        <p class="text-xs text-slate-400 mt-1">Prøv at ændre din søgning eller dit filter.</p>
+                    </div>
+                `;
+                return;
+            }
+
+            filtered.forEach(loc => {
+                const config = categoryConfig[loc.category];
+                const url = gmapsUrl(loc);
+
+                const card = document.createElement('div');
+                card.className = "p-3 hover:bg-amber-50/60 rounded-xl transition cursor-pointer group mb-1 border border-transparent hover:border-amber-200/60";
+                card.innerHTML = `
+                    <div class="flex justify-between items-start gap-2">
+                        <div>
+                            <div class="flex items-center gap-2 mb-1">
+                                <span class="px-2 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wider ${config.bgClass}">
+                                    ${config.label}
+                                </span>
+                                <span class="text-xs text-slate-400 font-medium">${loc.area}</span>
+                            </div>
+                            <h3 class="font-serif-italy font-bold text-slate-900 group-hover:text-amber-900 transition text-base">
+                                ${loc.name}
+                            </h3>
+                            <p class="text-xs text-slate-500 mt-0.5 flex items-center gap-1">
+                                <i class="fa-solid fa-location-dot text-slate-400"></i> ${loc.address}
+                            </p>
+                            ${loc.note ? `<p class="text-xs text-slate-600 mt-1.5 line-clamp-2">${loc.note}</p>` : ''}
+                        </div>
+                        <a href="${url}" target="_blank" rel="noopener noreferrer" title="Åbn i Google Maps" onclick="event.stopPropagation();"
+                           class="bg-slate-100 hover:bg-amber-900 hover:text-white text-slate-600 p-2 rounded-lg transition text-xs flex items-center justify-center shadow-sm">
+                            <i class="fa-solid fa-arrow-up-right-from-square"></i>
+                        </a>
+                    </div>
+                `;
+
+                card.addEventListener('click', () => {
+                    focusPlace(loc);
+                    // On mobile, automatically hide sidebar to show map
+                    if (window.innerWidth < 768) {
+                        toggleSidebar(false);
+                    }
+                });
+
+                listContainer.appendChild(card);
+            });
+
+            // Update visibility of markers on the map
+            markers.forEach(item => {
+                const shouldShow = filtered.some(f => f.id === item.id);
+                if (shouldShow) {
+                    if (!map.hasLayer(item.marker)) {
+                        map.addLayer(item.marker);
+                    }
+                } else {
+                    if (map.hasLayer(item.marker)) {
+                        map.removeLayer(item.marker);
+                    }
+                }
+            });
+        }
+
+        // Focus map on a selected place
+        function focusPlace(loc) {
+            map.flyTo([loc.lat, loc.lng], 16, {
+                animate: true,
+                duration: 1.2
+            });
+
+            const target = markers.find(m => m.id === loc.id);
+            if (target) {
+                setTimeout(() => {
+                    target.marker.openPopup();
+                }, 800);
+            }
+        }
+
+        // Update category counts
+        function updateCounts() {
+            document.getElementById('count-all').textContent = locations.length;
+            document.getElementById('count-restaurant').textContent = locations.filter(l => l.category === 'restaurant').length;
+            document.getElementById('count-pizzeria').textContent = locations.filter(l => l.category === 'pizzeria').length;
+            document.getElementById('count-aperitivo').textContent = locations.filter(l => l.category === 'aperitivo').length;
+        }
+
+        // Event Listeners
+        function setupEventListeners() {
+            // Search Input
+            document.getElementById('search-input').addEventListener('input', (e) => {
+                searchQuery = e.target.value.trim();
+                renderPlacesList();
+            });
+
+            // Category Filter Buttons
+            document.querySelectorAll('.filter-btn').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    document.querySelectorAll('.filter-btn').forEach(b => {
+                        b.classList.remove('active', 'bg-amber-900', 'text-white');
+                        b.classList.add('bg-white', 'text-slate-700');
+                    });
+                    btn.classList.add('active', 'bg-amber-900', 'text-white');
+                    btn.classList.remove('bg-white', 'text-slate-700');
+
+                    activeCategory = btn.dataset.category;
+                    renderPlacesList();
+                });
+            });
+
+            // Mobile Drawer Toggle
+            const toggleBtn = document.getElementById('toggle-list-btn');
+            const closeBtn = document.getElementById('close-sidebar-btn');
+
+            if (toggleBtn) {
+                toggleBtn.addEventListener('click', () => toggleSidebar(true));
+            }
+            if (closeBtn) {
+                closeBtn.addEventListener('click', () => toggleSidebar(false));
+            }
+        }
+
+        function toggleSidebar(open) {
+            const sidebar = document.getElementById('sidebar');
+            if (open) {
+                sidebar.classList.remove('-translate-x-full');
+            } else {
+                sidebar.classList.add('-translate-x-full');
+            }
+            setTimeout(() => {
+                map.invalidateSize();
+            }, 300);
+        }
+    </script>
+</body>
+</html>
